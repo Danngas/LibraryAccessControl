@@ -54,9 +54,9 @@ Sistema embarcado com FreeRTOS para controle de acesso interativo a uma bibliote
 - [Outras branches serão criadas para botão B, joystick, LED RGB, e buzzer.]
 
 ## Status
-- [x] Display OLED com mutex implementado.
-- [ ] Botão A (entrada) com semáforo de contagem.
-- [ ] Botão B (saída).
+- [X] Display OLED com mutex implementado.
+- [X] Botão A (entrada) com semáforo de contagem.
+- [X] Botão B (saída).
 - [ ] Joystick (reset com semáforo binário).
 - [ ] LED RGB (feedback visual).
 - [ ] Buzzer (feedback sonoro).

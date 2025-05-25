@@ -1,9 +1,10 @@
 /*
- * Painel de Controle Interativo - Display OLED e Botão A
+ * Painel de Controle Interativo - Display OLED, Botão A e Botão B
  * Autor: Daniel Silva de Souza
  * Data: 25/05/2025
- * Descrição: Configuração do display OLED SSD1306 com mutex e botão A para
- * incrementar contagem de usuários usando semáforo de contagem.
+ * Descrição: Sistema de controle de acesso usando display OLED SSD1306,
+ * mutex para sincronização de tarefas e semáforos para entrada e saída de usuários.
+ * Implementa botão A (entrada) e botão B (saída), com feedback visual no display.
  */
 
 #include "pico/stdlib.h"
@@ -20,35 +21,56 @@
 #define I2C_SDA 14
 #define I2C_SCL 15
 #define ENDERECO_OLED 0x3C
-#define BOTAO_A 5 // Pino do botão A
-#define MAX_usuarios 8 // Máximo de usuários
+#define BOTAO_A 5 // Pino do botão A (entrada)
+#define BOTAO_B 6 // Pino do botão B (saída)
+#define MAX_usuarios 8 // Capacidade máxima de usuários
 
 /* Variáveis Globais */
 ssd1306_t ssd; // Estrutura para o display OLED
-SemaphoreHandle_t xDisplayMutex; // Mutex para proteger o display
-SemaphoreHandle_t xContadorSem; // Semáforo de contagem para entradas
-volatile uint16_t usuariosAtivos = 0; // Contagem inicial de usuários
+SemaphoreHandle_t xDisplayMutex;   // Mutex para proteger o acesso ao display
+SemaphoreHandle_t xContadorSem;   // Semáforo de contagem para entradas
+SemaphoreHandle_t xSaidaSem;      // Semáforo de contagem para saídas
+volatile uint16_t usuariosAtivos = 0; // Contagem atual de usuários
+
+//DEbouncing 
+absolute_time_t ultimoA = 0;
+absolute_time_t ultimoB = 0;
+const uint32_t DEBOUNCE_US = 200000; // 200 ms
+
 
 /* Função para atualizar o display com mutex */
 void update_display(const char* msg, uint16_t count) {
     if (xSemaphoreTake(xDisplayMutex, portMAX_DELAY) == pdTRUE) {
         char buffer[32];
-        ssd1306_fill(&ssd, 0); // Limpa o buffer
-        ssd1306_draw_string(&ssd, msg, 5, 20); // Exibe mensagem
-        snprintf(buffer, sizeof(buffer), "Usuarios: %d", count); // Formata contagem
-        ssd1306_draw_string(&ssd, buffer, 5, 40); // Exibe contagem
+        ssd1306_fill(&ssd, 0); // Limpa o buffer do display
+        ssd1306_draw_string(&ssd, msg, 5, 20); // Exibe a mensagem principal
+        snprintf(buffer, sizeof(buffer), "Usuarios: %d", count); // Formata o número de usuários
+        ssd1306_draw_string(&ssd, buffer, 5, 40); // Exibe a contagem
         ssd1306_send_data(&ssd); // Atualiza o display
         xSemaphoreGive(xDisplayMutex); // Libera o mutex
     }
 }
 
-/* ISR para o botão A */
+/* Interrupções para os botões A e B */
 void gpio_irq_handler(uint gpio, uint32_t events) {
-    if (gpio == BOTAO_A && events & GPIO_IRQ_EDGE_FALL) {
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        xSemaphoreGiveFromISR(xContadorSem, &xHigherPriorityTaskWoken); // Libera o semáforo
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken); // Troca de contexto, se necessário
+    absolute_time_t agora = get_absolute_time();
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    if (gpio == BOTAO_A && (events & GPIO_IRQ_EDGE_FALL)) {
+        if (absolute_time_diff_us(ultimoA, agora) > DEBOUNCE_US) {
+            ultimoA = agora;
+            xSemaphoreGiveFromISR(xContadorSem, &xHigherPriorityTaskWoken);
+        }
     }
+
+    if (gpio == BOTAO_B && (events & GPIO_IRQ_EDGE_FALL)) {
+        if (absolute_time_diff_us(ultimoB, agora) > DEBOUNCE_US) {
+            ultimoB = agora;
+            xSemaphoreGiveFromISR(xSaidaSem, &xHigherPriorityTaskWoken);
+        }
+    }
+
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 /* Tarefa de Entrada (Botão A) */
@@ -56,53 +78,78 @@ void vTaskEntrada(void *params) {
     while (true) {
         if (xSemaphoreTake(xContadorSem, portMAX_DELAY) == pdTRUE) {
             if (usuariosAtivos < MAX_usuarios) {
-                usuariosAtivos++; // Incrementa contagem
-                update_display("Entrada!", usuariosAtivos); // Atualiza display
+                usuariosAtivos++; // Incrementa a contagem
+                update_display("Entrada!", usuariosAtivos); // Mostra mensagem no display
             } else {
-                update_display("Capacidade Maxima!", usuariosAtivos); // Mensagem de limite
-                // Placeholder para beep curto (implementaremos depois)
+                update_display("Capacidade Maxima!", usuariosAtivos); // Sistema cheio
+                // TODO: adicionar beep curto
             }
         }
     }
 }
 
-/* Tarefa do Display */
-void vDisplayTask(void *params) {
+/* Tarefa de Saída (Botão B) */
+void vTaskSaida(void *params) {
     while (true) {
-        update_display("Controle de Acesso", usuariosAtivos); // Mensagem inicial
-        vTaskDelay(pdMS_TO_TICKS(1000)); // Atualiza a cada 1s
+        if (xSemaphoreTake(xSaidaSem, portMAX_DELAY) == pdTRUE) {
+            if (usuariosAtivos > 0) {
+                usuariosAtivos--; // Decrementa a contagem
+                update_display("Saida!", usuariosAtivos); // Mostra mensagem no display
+            } else {
+                update_display("Nenhum usuario!", usuariosAtivos); // Ninguém para sair
+                // TODO: adicionar beep de erro
+            }
+        }
     }
 }
 
-/* Função Principal */
-int main() {
-    stdio_init_all(); // Inicializa comunicação serial
+/* Tarefa periódica para atualizar o display com status */
+void vDisplayTask(void *params) {
+    while (true) {
+        update_display("Controle de Acesso", usuariosAtivos); // Atualização contínua
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Espera 1 segundo
+    }
+}
 
-    /* Inicializa I2C e display OLED */
-    i2c_init(I2C_PORT, 400 * 1000); // 400 kHz
+/* Função principal */
+int main() {
+    stdio_init_all(); // Inicializa a saída serial (debug)
+
+    /* Inicialização do barramento I2C e do display OLED */
+    i2c_init(I2C_PORT, 400 * 1000); // Frequência de 400 kHz
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA);
     gpio_pull_up(I2C_SCL);
-    ssd1306_init(&ssd, 128, 64, false, ENDERECO_OLED, I2C_PORT); // 128x64, sem VCC externo
+    ssd1306_init(&ssd, 128, 64, false, ENDERECO_OLED, I2C_PORT); // Display 128x64
     ssd1306_config(&ssd);
-    ssd1306_send_data(&ssd);
+    ssd1306_send_data(&ssd); // Primeira atualização
 
-    /* Configura o botão A */
+    /* Configuração do botão A (entrada) */
     gpio_init(BOTAO_A);
     gpio_set_dir(BOTAO_A, GPIO_IN);
     gpio_pull_up(BOTAO_A);
     gpio_set_irq_enabled_with_callback(BOTAO_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
 
-    /* Cria o mutex do display e o semáforo de contagem */
-    xDisplayMutex = xSemaphoreCreateMutex();
-    xContadorSem = xSemaphoreCreateCounting(10, 0); // Máximo 10 eventos, inicial 0
+    /* Configuração do botão B (saída) */
+    gpio_init(BOTAO_B);
+    gpio_set_dir(BOTAO_B, GPIO_IN);
+    gpio_pull_up(BOTAO_B);
+    gpio_set_irq_enabled(BOTAO_B, GPIO_IRQ_EDGE_FALL, true);
 
-    /* Cria as tarefas */
+    /* Criação de mutex e semáforos */
+    xDisplayMutex = xSemaphoreCreateMutex(); // Protege o display OLED
+    xContadorSem = xSemaphoreCreateCounting(10, 0); // Até 10 eventos de entrada
+    xSaidaSem = xSemaphoreCreateCounting(10, 0);    // Até 10 eventos de saída
+
+    /* Criação das tarefas */
     xTaskCreate(vTaskEntrada, "EntradaTask", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
+    xTaskCreate(vTaskSaida, "SaidaTask", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
     xTaskCreate(vDisplayTask, "DisplayTask", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
 
-    /* Inicia o escalonador */
+    /* Inicia o escalonador FreeRTOS */
     vTaskStartScheduler();
-    panic_unsupported(); // Caso o escalonador falhe
+
+    /* Caso o escalonador falhe */
+    panic_unsupported();
 }

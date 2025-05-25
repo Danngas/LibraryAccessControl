@@ -1,14 +1,15 @@
 /*
- * Painel de Controle Interativo - Display OLED, Botão A, Botão B, Joystick
+ * Painel de Controle Interativo - Display OLED, Botão A, Botão B, Joystick, LED RGB, Buzzer
  * Autor: Daniel Silva de Souza
  * Data: 25/05/2025
- * Descrição: Sistema de controle de acesso usando display OLED SSD1306,
- * mutex para sincronização, semáforos para entrada/saída, e semáforo binário para reset.
+ * Descrição: Sistema de controle de acesso com display OLED, mutex, semáforos para
+ * entrada/saída/reset, LED RGB para feedback visual, e buzzer para feedback sonoro.
  */
 
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "hardware/gpio.h"
+#include "hardware/pwm.h"
 #include "lib/ssd1306.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -23,6 +24,10 @@
 #define BOTAO_A 5 // Pino do botão A (entrada)
 #define BOTAO_B 6 // Pino do botão B (saída)
 #define JOYSTICK 22 // Pino do botão do joystick (reset)
+#define LED_R 13 // Pino do LED vermelho
+#define LED_G 11 // Pino do LED verde
+#define LED_B 12 // Pino do LED azul
+#define BUZZER 21 // Pino do buzzer
 #define MAX_usuarios 8 // Capacidade máxima de usuários
 
 /* Variáveis Globais */
@@ -38,6 +43,44 @@ absolute_time_t ultimoA = 0;
 absolute_time_t ultimoB = 0;
 absolute_time_t ultimoJoystick = 0;
 const uint32_t DEBOUNCE_US = 200000; // 200 ms
+
+/* Configuração do Buzzer */
+#define BUZZER_FREQ 1000 // Frequência do buzzer (1000 Hz)
+void buzzer_beep_curto() {
+    pwm_set_enabled(pwm_gpio_to_slice_num(BUZZER), true);
+    vTaskDelay(pdMS_TO_TICKS(100)); // Beep de 100ms
+    pwm_set_enabled(pwm_gpio_to_slice_num(BUZZER), false);
+}
+
+void buzzer_beep_duplo() {
+    pwm_set_enabled(pwm_gpio_to_slice_num(BUZZER), true);
+    vTaskDelay(pdMS_TO_TICKS(100)); // Primeiro beep
+    pwm_set_enabled(pwm_gpio_to_slice_num(BUZZER), false);
+    vTaskDelay(pdMS_TO_TICKS(100)); // Pausa
+    pwm_set_enabled(pwm_gpio_to_slice_num(BUZZER), true);
+    vTaskDelay(pdMS_TO_TICKS(100)); // Segundo beep
+    pwm_set_enabled(pwm_gpio_to_slice_num(BUZZER), false);
+}
+
+/* Função para configurar o LED RGB */
+void set_rgb_color(uint8_t r, uint8_t g, uint8_t b) {
+    gpio_put(LED_R, r);
+    gpio_put(LED_G, g);
+    gpio_put(LED_B, b);
+}
+
+/* Função para atualizar o LED RGB com base na contagem */
+void update_rgb_led() {
+    if (usuariosAtivos == 0) {
+        set_rgb_color(0, 0, 1); // Azul
+    } else if (usuariosAtivos <= MAX_usuarios - 2) {
+        set_rgb_color(0, 1, 0); // Verde
+    } else if (usuariosAtivos == MAX_usuarios - 1) {
+        set_rgb_color(1, 1, 0); // Amarelo
+    } else {
+        set_rgb_color(1, 0, 0); // Vermelho
+    }
+}
 
 /* Função para atualizar o display com mutex */
 void update_display(const char* msg, uint16_t count) {
@@ -87,10 +130,11 @@ void vTaskEntrada(void *params) {
         if (xSemaphoreTake(xContadorSem, portMAX_DELAY) == pdTRUE) {
             if (usuariosAtivos < MAX_usuarios) {
                 usuariosAtivos++; // Incrementa a contagem
-                update_display("Entrada!", usuariosAtivos); // Mostra mensagem no display
+                update_display("Entrada!", usuariosAtivos);
+                update_rgb_led(); // Atualiza o LED RGB
             } else {
-                update_display("Capacidade Maxima!", usuariosAtivos); // Sistema cheio
-                // TODO: adicionar beep curto
+                update_display("Capacidade Maxima!", usuariosAtivos);
+                buzzer_beep_curto(); // Beep curto
             }
         }
     }
@@ -102,10 +146,11 @@ void vTaskSaida(void *params) {
         if (xSemaphoreTake(xSaidaSem, portMAX_DELAY) == pdTRUE) {
             if (usuariosAtivos > 0) {
                 usuariosAtivos--; // Decrementa a contagem
-                update_display("Saida!", usuariosAtivos); // Mostra mensagem no display
+                update_display("Saida!", usuariosAtivos);
+                update_rgb_led(); // Atualiza o LED RGB
             } else {
-                update_display("Nenhum usuario!", usuariosAtivos); // Ninguém para sair
-                // TODO: adicionar beep de erro
+                update_display("Nenhum usuario!", usuariosAtivos);
+                buzzer_beep_curto(); // Beep de erro
             }
         }
     }
@@ -116,8 +161,9 @@ void vTaskReset(void *params) {
     while (true) {
         if (xSemaphoreTake(xResetSem, portMAX_DELAY) == pdTRUE) {
             usuariosAtivos = 0; // Zera a contagem
-            update_display("Sistema Reiniciado!", usuariosAtivos); // Mostra mensagem no display
-            // TODO: adicionar beep duplo
+            update_display("Sistema Reiniciado!", usuariosAtivos);
+            update_rgb_led(); // Atualiza o LED RGB
+            buzzer_beep_duplo(); // Beep duplo
         }
     }
 }
@@ -125,7 +171,8 @@ void vTaskReset(void *params) {
 /* Tarefa periódica para atualizar o display com status */
 void vDisplayTask(void *params) {
     while (true) {
-        update_display("Controle de Acesso", usuariosAtivos); // Atualização contínua
+        update_display("Controle de Acesso", usuariosAtivos);
+        update_rgb_led(); // Atualiza o LED RGB
         vTaskDelay(pdMS_TO_TICKS(5000)); // Espera 5 segundos
     }
 }
@@ -144,7 +191,7 @@ int main() {
     ssd1306_config(&ssd);
     ssd1306_send_data(&ssd); // Primeira atualização
 
-    /* Configuração dos botões A, B e joystick */
+    /* Configuração dos botões A, B, joystick, LED RGB e buzzer */
     gpio_init(BOTAO_A);
     gpio_set_dir(BOTAO_A, GPIO_IN);
     gpio_pull_up(BOTAO_A);
@@ -154,6 +201,22 @@ int main() {
     gpio_init(JOYSTICK);
     gpio_set_dir(JOYSTICK, GPIO_IN);
     gpio_pull_up(JOYSTICK);
+    gpio_init(LED_R);
+    gpio_set_dir(LED_R, GPIO_OUT);
+    gpio_init(LED_G);
+    gpio_set_dir(LED_G, GPIO_OUT);
+    gpio_init(LED_B);
+    gpio_set_dir(LED_B, GPIO_OUT);
+
+    /* Configuração do PWM para o buzzer */
+    gpio_set_function(BUZZER, GPIO_FUNC_PWM);
+    uint slice_num = pwm_gpio_to_slice_num(BUZZER);
+    pwm_config config = pwm_get_default_config();
+    pwm_config_set_clkdiv(&config, 125.0f); // Divisor para frequência
+    pwm_config_set_wrap(&config, 1000); // Período para ~1000 Hz
+    pwm_init(slice_num, &config, false); // Inicializa PWM, mas não ativa
+    pwm_set_gpio_level(BUZZER, 500); // Duty cycle de 50%
+
     gpio_set_irq_enabled_with_callback(BOTAO_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
     gpio_set_irq_enabled(BOTAO_B, GPIO_IRQ_EDGE_FALL, true);
     gpio_set_irq_enabled(JOYSTICK, GPIO_IRQ_EDGE_FALL, true);

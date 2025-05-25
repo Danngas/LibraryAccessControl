@@ -1,10 +1,9 @@
 /*
- * Painel de Controle Interativo - Display OLED, Botão A e Botão B
+ * Painel de Controle Interativo - Display OLED, Botão A, Botão B, Joystick
  * Autor: Daniel Silva de Souza
  * Data: 25/05/2025
  * Descrição: Sistema de controle de acesso usando display OLED SSD1306,
- * mutex para sincronização de tarefas e semáforos para entrada e saída de usuários.
- * Implementa botão A (entrada) e botão B (saída), com feedback visual no display.
+ * mutex para sincronização, semáforos para entrada/saída, e semáforo binário para reset.
  */
 
 #include "pico/stdlib.h"
@@ -23,20 +22,22 @@
 #define ENDERECO_OLED 0x3C
 #define BOTAO_A 5 // Pino do botão A (entrada)
 #define BOTAO_B 6 // Pino do botão B (saída)
+#define JOYSTICK 22 // Pino do botão do joystick (reset)
 #define MAX_usuarios 8 // Capacidade máxima de usuários
 
 /* Variáveis Globais */
 ssd1306_t ssd; // Estrutura para o display OLED
-SemaphoreHandle_t xDisplayMutex;   // Mutex para proteger o acesso ao display
-SemaphoreHandle_t xContadorSem;   // Semáforo de contagem para entradas
-SemaphoreHandle_t xSaidaSem;      // Semáforo de contagem para saídas
+SemaphoreHandle_t xDisplayMutex; // Mutex para proteger o acesso ao display
+SemaphoreHandle_t xContadorSem; // Semáforo de contagem para entradas
+SemaphoreHandle_t xSaidaSem; // Semáforo de contagem para saídas
+SemaphoreHandle_t xResetSem; // Semáforo binário para reset
 volatile uint16_t usuariosAtivos = 0; // Contagem atual de usuários
 
-//DEbouncing 
+/* Debouncing */
 absolute_time_t ultimoA = 0;
 absolute_time_t ultimoB = 0;
+absolute_time_t ultimoJoystick = 0;
 const uint32_t DEBOUNCE_US = 200000; // 200 ms
-
 
 /* Função para atualizar o display com mutex */
 void update_display(const char* msg, uint16_t count) {
@@ -51,7 +52,7 @@ void update_display(const char* msg, uint16_t count) {
     }
 }
 
-/* Interrupções para os botões A e B */
+/* Interrupções para botões A, B e joystick */
 void gpio_irq_handler(uint gpio, uint32_t events) {
     absolute_time_t agora = get_absolute_time();
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -67,6 +68,13 @@ void gpio_irq_handler(uint gpio, uint32_t events) {
         if (absolute_time_diff_us(ultimoB, agora) > DEBOUNCE_US) {
             ultimoB = agora;
             xSemaphoreGiveFromISR(xSaidaSem, &xHigherPriorityTaskWoken);
+        }
+    }
+
+    if (gpio == JOYSTICK && (events & GPIO_IRQ_EDGE_FALL)) {
+        if (absolute_time_diff_us(ultimoJoystick, agora) > DEBOUNCE_US) {
+            ultimoJoystick = agora;
+            xSemaphoreGiveFromISR(xResetSem, &xHigherPriorityTaskWoken);
         }
     }
 
@@ -103,11 +111,22 @@ void vTaskSaida(void *params) {
     }
 }
 
+/* Tarefa de Reset (Joystick) */
+void vTaskReset(void *params) {
+    while (true) {
+        if (xSemaphoreTake(xResetSem, portMAX_DELAY) == pdTRUE) {
+            usuariosAtivos = 0; // Zera a contagem
+            update_display("Sistema Reiniciado!", usuariosAtivos); // Mostra mensagem no display
+            // TODO: adicionar beep duplo
+        }
+    }
+}
+
 /* Tarefa periódica para atualizar o display com status */
 void vDisplayTask(void *params) {
     while (true) {
         update_display("Controle de Acesso", usuariosAtivos); // Atualização contínua
-        vTaskDelay(pdMS_TO_TICKS(1000)); // Espera 1 segundo
+        vTaskDelay(pdMS_TO_TICKS(5000)); // Espera 5 segundos
     }
 }
 
@@ -125,26 +144,30 @@ int main() {
     ssd1306_config(&ssd);
     ssd1306_send_data(&ssd); // Primeira atualização
 
-    /* Configuração do botão A (entrada) */
+    /* Configuração dos botões A, B e joystick */
     gpio_init(BOTAO_A);
     gpio_set_dir(BOTAO_A, GPIO_IN);
     gpio_pull_up(BOTAO_A);
-    gpio_set_irq_enabled_with_callback(BOTAO_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
-
-    /* Configuração do botão B (saída) */
     gpio_init(BOTAO_B);
     gpio_set_dir(BOTAO_B, GPIO_IN);
     gpio_pull_up(BOTAO_B);
+    gpio_init(JOYSTICK);
+    gpio_set_dir(JOYSTICK, GPIO_IN);
+    gpio_pull_up(JOYSTICK);
+    gpio_set_irq_enabled_with_callback(BOTAO_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
     gpio_set_irq_enabled(BOTAO_B, GPIO_IRQ_EDGE_FALL, true);
+    gpio_set_irq_enabled(JOYSTICK, GPIO_IRQ_EDGE_FALL, true);
 
     /* Criação de mutex e semáforos */
     xDisplayMutex = xSemaphoreCreateMutex(); // Protege o display OLED
     xContadorSem = xSemaphoreCreateCounting(10, 0); // Até 10 eventos de entrada
-    xSaidaSem = xSemaphoreCreateCounting(10, 0);    // Até 10 eventos de saída
+    xSaidaSem = xSemaphoreCreateCounting(10, 0); // Até 10 eventos de saída
+    xResetSem = xSemaphoreCreateBinary(); // Semáforo binário para reset
 
     /* Criação das tarefas */
     xTaskCreate(vTaskEntrada, "EntradaTask", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
     xTaskCreate(vTaskSaida, "SaidaTask", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
+    xTaskCreate(vTaskReset, "ResetTask", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
     xTaskCreate(vDisplayTask, "DisplayTask", configMINIMAL_STACK_SIZE + 128, NULL, 1, NULL);
 
     /* Inicia o escalonador FreeRTOS */

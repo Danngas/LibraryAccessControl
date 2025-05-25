@@ -1,9 +1,9 @@
 /*
- * Painel de Controle Interativo - Display OLED, Botão A, Botão B, Joystick
+ * Painel de Controle Interativo - Display OLED, Botão A, Botão B, Joystick, LED RGB
  * Autor: Daniel Silva de Souza
  * Data: 25/05/2025
- * Descrição: Sistema de controle de acesso usando display OLED SSD1306,
- * mutex para sincronização, semáforos para entrada/saída, e semáforo binário para reset.
+ * Descrição: Sistema de controle de acesso com display OLED, mutex, semáforos para
+ * entrada/saída/reset, e LED RGB para feedback visual.
  */
 
 #include "pico/stdlib.h"
@@ -23,6 +23,9 @@
 #define BOTAO_A 5 // Pino do botão A (entrada)
 #define BOTAO_B 6 // Pino do botão B (saída)
 #define JOYSTICK 22 // Pino do botão do joystick (reset)
+#define LED_R 13 // Pino do LED vermelho
+#define LED_G 11 // Pino do LED verde
+#define LED_B 12 // Pino do LED azul
 #define MAX_usuarios 8 // Capacidade máxima de usuários
 
 /* Variáveis Globais */
@@ -38,6 +41,26 @@ absolute_time_t ultimoA = 0;
 absolute_time_t ultimoB = 0;
 absolute_time_t ultimoJoystick = 0;
 const uint32_t DEBOUNCE_US = 200000; // 200 ms
+
+/* Função para configurar o LED RGB */
+void set_rgb_color(uint8_t r, uint8_t g, uint8_t b) {
+    gpio_put(LED_R, r);
+    gpio_put(LED_G, g);
+    gpio_put(LED_B, b);
+}
+
+/* Função para atualizar o LED RGB com base na contagem */
+void update_rgb_led() {
+    if (usuariosAtivos == 0) {
+        set_rgb_color(0, 0, 1); // Azul
+    } else if (usuariosAtivos <= MAX_usuarios - 2) {
+        set_rgb_color(0, 1, 0); // Verde
+    } else if (usuariosAtivos == MAX_usuarios - 1) {
+        set_rgb_color(1, 1, 0); // Amarelo
+    } else {
+        set_rgb_color(1, 0, 0); // Vermelho
+    }
+}
 
 /* Função para atualizar o display com mutex */
 void update_display(const char* msg, uint16_t count) {
@@ -87,9 +110,10 @@ void vTaskEntrada(void *params) {
         if (xSemaphoreTake(xContadorSem, portMAX_DELAY) == pdTRUE) {
             if (usuariosAtivos < MAX_usuarios) {
                 usuariosAtivos++; // Incrementa a contagem
-                update_display("Entrada!", usuariosAtivos); // Mostra mensagem no display
+                update_display("Entrada!", usuariosAtivos);
+                update_rgb_led(); // Atualiza o LED RGB
             } else {
-                update_display("Capacidade Maxima!", usuariosAtivos); // Sistema cheio
+                update_display("Capacidade Maxima!", usuariosAtivos);
                 // TODO: adicionar beep curto
             }
         }
@@ -102,9 +126,10 @@ void vTaskSaida(void *params) {
         if (xSemaphoreTake(xSaidaSem, portMAX_DELAY) == pdTRUE) {
             if (usuariosAtivos > 0) {
                 usuariosAtivos--; // Decrementa a contagem
-                update_display("Saida!", usuariosAtivos); // Mostra mensagem no display
+                update_display("Saida!", usuariosAtivos);
+                update_rgb_led(); // Atualiza o LED RGB
             } else {
-                update_display("Nenhum usuario!", usuariosAtivos); // Ninguém para sair
+                update_display("Nenhum usuario!", usuariosAtivos);
                 // TODO: adicionar beep de erro
             }
         }
@@ -116,7 +141,8 @@ void vTaskReset(void *params) {
     while (true) {
         if (xSemaphoreTake(xResetSem, portMAX_DELAY) == pdTRUE) {
             usuariosAtivos = 0; // Zera a contagem
-            update_display("Sistema Reiniciado!", usuariosAtivos); // Mostra mensagem no display
+            update_display("Sistema Reiniciado!", usuariosAtivos);
+            update_rgb_led(); // Atualiza o LED RGB
             // TODO: adicionar beep duplo
         }
     }
@@ -125,7 +151,8 @@ void vTaskReset(void *params) {
 /* Tarefa periódica para atualizar o display com status */
 void vDisplayTask(void *params) {
     while (true) {
-        update_display("Controle de Acesso", usuariosAtivos); // Atualização contínua
+        update_display("Controle de Acesso", usuariosAtivos);
+        update_rgb_led(); // Atualiza o LED RGB
         vTaskDelay(pdMS_TO_TICKS(5000)); // Espera 5 segundos
     }
 }
@@ -144,7 +171,7 @@ int main() {
     ssd1306_config(&ssd);
     ssd1306_send_data(&ssd); // Primeira atualização
 
-    /* Configuração dos botões A, B e joystick */
+    /* Configuração dos botões A, B, joystick e LED RGB */
     gpio_init(BOTAO_A);
     gpio_set_dir(BOTAO_A, GPIO_IN);
     gpio_pull_up(BOTAO_A);
@@ -154,6 +181,12 @@ int main() {
     gpio_init(JOYSTICK);
     gpio_set_dir(JOYSTICK, GPIO_IN);
     gpio_pull_up(JOYSTICK);
+    gpio_init(LED_R);
+    gpio_set_dir(LED_R, GPIO_OUT);
+    gpio_init(LED_G);
+    gpio_set_dir(LED_G, GPIO_OUT);
+    gpio_init(LED_B);
+    gpio_set_dir(LED_B, GPIO_OUT);
     gpio_set_irq_enabled_with_callback(BOTAO_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
     gpio_set_irq_enabled(BOTAO_B, GPIO_IRQ_EDGE_FALL, true);
     gpio_set_irq_enabled(JOYSTICK, GPIO_IRQ_EDGE_FALL, true);

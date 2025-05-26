@@ -1,6 +1,6 @@
 # Sistema de Controle de Acesso Interativo para Biblioteca
 
-![Sistema de Controle](system_image.png)
+![Sistema de Controle](logo-embarcaTech.png)
 
 ## Descrição
 

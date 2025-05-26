@@ -1,140 +1,237 @@
 #include "matrizled.c"
 #include "FreeRTOS.h"
 #include "task.h"
-#include <time.h>
-#include <stdlib.h>
+#include "semphr.h"
 
-// Intensidade padrão para as animações
-#define intensidade 1
+// Matriz RESET_PISCA (vermelha, intensidade 10)
+int RESET_PISCAO[5][5][3] = {
+    {{10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}},
+    {{10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}},
+    {{10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}},
+    {{10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}},
+    {{10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}}
+};
 
-void printNum(void) {
-    npWrite();
-    npClear();
-}
-
-// Sprites existentes
-int OFF[5][5][3] = {
+// Frames de animação do boneco (vermelho, saída, intensidade 10)
+int BonecoFrame1[5][5][3] = {
+    {{10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
     {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
     {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
+};
+
+int BonecoFrame2[5][5][3] = {
+    {{0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{10, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
+};
+
+int BonecoFrame3[5][5][3] = {
+    {{10, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}}
+};
+
+int BonecoFrame4[5][5][3] = {
+    {{0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}},
+    {{10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{10, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}}
+};
+
+int BonecoFrame5[5][5][3] = {
+    {{10, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {10, 0, 0}},
+    {{10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}}
+};
+
+int BonecoFrame6[5][5][3] = {
+    {{0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {10, 0, 0}},
+    {{0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}}
+};
+
+int BonecoFrame7[5][5][3] = {
+    {{0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}, {10, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {10, 0, 0}, {10, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}}
+};
+
+int BonecoFrame8[5][5][3] = {
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {10, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}, {0, 0, 0}}
+};
+
+int BonecoFrame9[5][5][3] = {
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {10, 0, 0}},
     {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
     {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
     {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
 };
 
-int ATENCAO[5][5][3] = {
-    {{0, 0, 0}, {128, 128, 0}, {128, 128, 0}, {128, 128, 0}, {0, 0, 0}},
-    {{128, 128, 0}, {128, 128, 0}, {0, 0, 0}, {128, 128, 0}, {128, 128, 0}},
-    {{128, 128, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {128, 128, 0}},
-    {{128, 128, 0}, {0, 0, 0}, {128, 128, 0}, {0, 0, 0}, {128, 128, 0}},
-    {{0, 0, 0}, {128, 128, 0}, {128, 128, 0}, {128, 128, 0}, {0, 0, 0}}
+// Frames de animação do boneco (verde, entrada, intensidade 10)
+int BonecoEntradaFrame1[5][5][3] = {
+    {{0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
 };
 
-int SETA_VERDE[5][5][3] = {
-    {{0, 0, 0}, {0, 0, 0}, {0, 128, 0}, {0, 0, 0}, {0, 0, 0}},
-    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 128, 0}, {0, 0, 0}},
-    {{0, 128, 0}, {0, 128, 0}, {0, 128, 0}, {0, 128, 0}, {0, 128, 0}},
-    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 128, 0}, {0, 0, 0}},
-    {{0, 0, 0}, {0, 0, 0}, {0, 128, 0}, {0, 0, 0}, {0, 0, 0}}
+int BonecoEntradaFrame2[5][5][3] = {
+    {{0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 10, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
 };
 
-int X_VERMELHO[5][5][3] = {
-    {{128, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {128, 0, 0}},
-    {{0, 0, 0}, {128, 0, 0}, {0, 0, 0}, {128, 0, 0}, {0, 0, 0}},
-    {{0, 0, 0}, {0, 0, 0}, {128, 0, 0}, {0, 0, 0}, {0, 0, 0}},
-    {{0, 0, 0}, {128, 0, 0}, {0, 0, 0}, {128, 0, 0}, {0, 0, 0}},
-    {{128, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {128, 0, 0}}
+int BonecoEntradaFrame3[5][5][3] = {
+    {{0, 10, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 10, 0}, {0, 10, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}}
 };
 
-// Funções existentes
-void PedestreSIGA(void) {
-    desenhaSprite(SETA_VERDE, intensidade);
-    printNum();
-}
+int BonecoEntradaFrame4[5][5][3] = {
+    {{0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}},
+    {{0, 10, 0}, {0, 10, 0}, {0, 10, 0}, {0, 10, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 10, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}}
+};
 
-void PedestrePARE(void) {
-    desenhaSprite(X_VERMELHO, intensidade);
-    printNum();
-}
+int BonecoEntradaFrame5[5][5][3] = {
+    {{0, 10, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 10, 0}},
+    {{0, 10, 0}, {0, 10, 0}, {0, 10, 0}, {0, 10, 0}, {0, 10, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}}
+};
 
-void Amarelo_Noturno(void) {
-    desenhaSprite(ATENCAO, intensidade);
-    printNum();
-}
+int BonecoEntradaFrame6[5][5][3] = {
+    {{0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 10, 0}, {0, 10, 0}, {0, 10, 0}, {0, 10, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 10, 0}},
+    {{0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}}
+};
 
-void DesligaMatriz(void) {
-    desenhaSprite(OFF, intensidade);
-    printNum();
-}
+int BonecoEntradaFrame7[5][5][3] = {
+    {{0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}, {0, 10, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 10, 0}, {0, 10, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}}
+};
 
-// Animação para SEGURO: seta verde estática
-void anim_seguro(void) {
-    PedestreSIGA();
-    vTaskDelay(pdMS_TO_TICKS(100)); // 10 Hz
-}
+int BonecoEntradaFrame8[5][5][3] = {
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 10, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}, {0, 0, 0}}
+};
 
-// Animação para ALERTA: chuva piscante azul
-void anim_alerta(void) {
+int BonecoEntradaFrame9[5][5][3] = {
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 10, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}},
+    {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
+};
+
+// Função para desenhar um frame específico
+void desenhaFrame(int frame[5][5][3]) {
     npClear();
-    for (int i = 0; i < 3; i++) {
-        int x = rand() % 5;
-        int y = rand() % 5;
-        int posicao = getIndex(x, y);
-        npSetLED(posicao, 0, 0, 100); // Azul
-    }
-    npWrite();
-    vTaskDelay(pdMS_TO_TICKS(500)); // 2 Hz
-}
-
-// Animação para ENCHENTE: linhas azuis baseadas no nível de água
-void anim_enchente(uint16_t nivel_agua) {
-    npClear();
-
-    // Converte nível de água para percentual (0–100)
-    uint8_t percent_agua = (nivel_agua * 100) / 4095;
-
-    // Verifica intervalos e acende linhas horizontais em azul (de baixo para cima)
-    if (percent_agua >= 98) {
-        // Linhas 4, 3, 2, 1, 0 (todas)
-        for (int row = 0; row < 5; row++) {
-            for (int col = 0; col < 5; col++) {
-                int posicao = getIndex(col, row);
-                npSetLED(posicao, 0, 0, 100); // Azul
-            }
-        }
-    } else if (percent_agua >= 80) {
-        // Linhas 4, 3, 2, 1
-        for (int row = 1; row <= 4; row++) {
-            for (int col = 0; col < 5; col++) {
-                int posicao = getIndex(col, row);
-                npSetLED(posicao, 0, 0, 100); // Azul
-            }
-        }
-    } else if (percent_agua >= 60) {
-        // Linhas 4, 3, 2
-        for (int row = 2; row <= 4; row++) {
-            for (int col = 0; col < 5; col++) {
-                int posicao = getIndex(col, row);
-                npSetLED(posicao, 0, 0, 100); // Azul
-            }
-        }
-    } else if (percent_agua >= 40) {
-        // Linhas 4, 3
-        for (int row = 3; row <= 4; row++) {
-            for (int col = 0; col < 5; col++) {
-                int posicao = getIndex(col, row);
-                npSetLED(posicao, 0, 0, 100); // Azul
-            }
-        }
-    } else if (percent_agua >= 20) {
-        // Linha 4
+    for (int row = 0; row < 5; row++) {
         for (int col = 0; col < 5; col++) {
-            int posicao = getIndex(col, 4);
-            npSetLED(posicao, 0, 0, 100); // Azul
+            int posicao = getIndex(col, row);
+            npSetLED(posicao, frame[row][col][0], frame[row][col][1], frame[row][col][2]);
         }
     }
-    // 0–19%: Nenhuma linha (npClear já limpou)
-
     npWrite();
-    vTaskDelay(pdMS_TO_TICKS(100)); // 10 Hz
 }
 
+// Animação de entrada (verde, Frame1 a Frame9)
+void anim_entrada(SemaphoreHandle_t xMatrixMutex) {
+    if (xSemaphoreTake(xMatrixMutex, portMAX_DELAY) == pdTRUE) {
+        int (*frames[9])[5][3] = {BonecoEntradaFrame1, BonecoEntradaFrame2, BonecoEntradaFrame3,
+                                  BonecoEntradaFrame4, BonecoEntradaFrame5, BonecoEntradaFrame6,
+                                  BonecoEntradaFrame7, BonecoEntradaFrame8, BonecoEntradaFrame9};
+        for (int f = 0; f < 9; f++) {
+            desenhaFrame(frames[f]);
+            vTaskDelay(pdMS_TO_TICKS(100)); // 10 Hz
+        }
+        npClear();
+        npWrite();
+        xSemaphoreGive(xMatrixMutex);
+    }
+}
+
+// Animação de saída (vermelho, Frame9 a Frame1)
+void anim_saida(SemaphoreHandle_t xMatrixMutex) {
+    if (xSemaphoreTake(xMatrixMutex, portMAX_DELAY) == pdTRUE) {
+        int (*frames[9])[5][3] = {BonecoFrame9, BonecoFrame8, BonecoFrame7, BonecoFrame6,
+                                  BonecoFrame5, BonecoFrame4, BonecoFrame3, BonecoFrame2,
+                                  BonecoFrame1};
+        for (int f = 0; f < 9; f++) {
+            desenhaFrame(frames[f]);
+            vTaskDelay(pdMS_TO_TICKS(100)); // 10 Hz
+        }
+        npClear();
+        npWrite();
+        xSemaphoreGive(xMatrixMutex);
+    }
+}
+
+// Animação de reset
+void anim_reset(SemaphoreHandle_t xMatrixMutex) {
+    if (xSemaphoreTake(xMatrixMutex, portMAX_DELAY) == pdTRUE) {
+        for (int i = 0; i < 3; i++) {
+            desenhaFrame(RESET_PISCAO);
+            vTaskDelay(pdMS_TO_TICKS(100));
+            npClear();
+            npWrite();
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        npClear();
+        npWrite();
+        xSemaphoreGive(xMatrixMutex);
+    }
+}
+
+// Animação de contagem
+void anim_contagem(int usuariosAtivos, SemaphoreHandle_t xMatrixMutex) {
+    if (xSemaphoreTake(xMatrixMutex, portMAX_DELAY) == pdTRUE) {
+        npClear(); // Limpa a matriz
+        for (int i = 0; i < 25; i++) { // Percorre os 25 LEDs
+            if (i < usuariosAtivos) { // Acende até usuariosAtivos LEDs
+                if (usuariosAtivos == 25) {
+                    npSetLED(i, 10, 0, 0); // Vermelho na lotação máxima
+                } else {
+                    npSetLED(i, 0, 10, 0); // Verde para contagem normal
+                }
+            }
+        }
+        npWrite(); // Atualiza a matriz
+        xSemaphoreGive(xMatrixMutex); // Libera o mutex
+    }
+}

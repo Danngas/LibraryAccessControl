@@ -52,12 +52,12 @@ Este sistema é **adaptável** para outros cenários que envolvam contagem de pe
 
 ### Feedback Sonoro
 - **Buzzer** (GP21, PWM):
-  - Beep curto (1000 Hz, 100 ms): Entrada cheia, saída sem usuários, entrada/saída.
+  - Beep curto (1000 Hz, 100 ms): Entrada cheia, saída sem usuários.
   - Beep duplo (1000 Hz, 2x100 ms com pausa): Reset.
 - Suporta acessibilidade para deficientes visuais.
 
 ### Status Periódico
-- Atualização a cada 5 segundos:
+- Atualização a cada 1 segundos:
   - Exibe "Controle de Acesso" (posição 5,30) e contagem no display.
   - Atualiza LED RGB e matriz (grade 2x4).
 

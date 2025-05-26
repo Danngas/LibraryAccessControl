@@ -12,8 +12,6 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-#============================================================================
-# ====================================================================================
 
 cmake_minimum_required(VERSION 3.13)
 set(CMAKE_C_STANDARD 11)
@@ -24,8 +22,7 @@ include(pico_sdk_import.cmake)
 set(FREERTOS_KERNEL_PATH "C:/FreeRTOS-Kernel")
 include(${FREERTOS_KERNEL_PATH}/portable/ThirdParty/GCC/RP2040/FreeRTOS_Kernel_import.cmake)
 
-project(LibraryAccessControl
-C CXX ASM)
+project(LibraryAccessControl C CXX ASM)
 pico_sdk_init()
 
 
@@ -63,7 +60,3 @@ pico_enable_stdio_usb(${PROJECT_NAME} 1)
 pico_enable_stdio_uart(${PROJECT_NAME} 0)
 
 pico_add_extra_outputs(${PROJECT_NAME})
-
-
-
-

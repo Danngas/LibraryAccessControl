@@ -1,65 +1,95 @@
-# LibraryAccessControl
+# Sistema de Controle de Acesso Interativo para Biblioteca
+
+![Sistema de Controle](system_image.png)
 
 ## Descrição
-Sistema embarcado com FreeRTOS para controle de acesso interativo a uma biblioteca, utilizando a placa **BitDogLab com RP2040**. O projeto implementa um painel de controle que gerencia a entrada e saída de usuários, com limite máximo de 8 pessoas, fornecendo feedback visual (display OLED, LED RGB) e sonoro (buzzer). Usa **semáforo de contagem**, **semáforo binário**, e **mutex** para sincronização de tarefas, conforme especificado na atividade "Sistemas Multitarefas Parte 3".
 
-**Autor**: Daniel Silva de Souza  
-**Data**: 25/05/2025  
-**Polo**: [Preencher com seu polo, ex.: Bom Jesus da Lapa]
+O **Sistema de Controle de Acesso Interativo** é um projeto desenvolvido com a placa **BitDogLab** (microcontrolador **RP2040**) para gerenciar o acesso de até 8 usuários a uma **biblioteca**, utilizando **FreeRTOS** com sincronização por semáforos, mutexes e filas de eventos. O sistema controla entradas (Botão A), saídas (Botão B) e reset (joystick), com feedback visual (display OLED, LED RGB, matriz WS2812B 5x5) e sonoro (buzzer). Animações na matriz, como um boneco caminhando para entrada/saída e uma grade de contagem, tornam o sistema intuitivo e acessível.
+
+Este sistema é **adaptável** para outros cenários que envolvam contagem de pessoas ou recursos, como:
+- **Refeitório**: Controle de ocupação de mesas.
+- **Sala de aula**: Monitoramento de alunos presentes.
+- **Eventos**: Gestão de ingressos ou participantes.
+- **Espaços públicos**: Limitação de acesso em museus ou ginásios.
 
 ## Funcionalidades
-- **Entrada de usuário**: Incrementa a contagem de usuários via botão A, até o limite de 8.
-- **Saída de usuário**: Decrementa a contagem via botão B.
-- **Reset do sistema**: Zera a contagem via botão do joystick, com interrupção.
-- **Feedback visual**:
-  - Display OLED exibe contagem de usuários e mensagens (ex.: "Entrada!", "Capacidade Máxima!").
-  - LED RGB indica estados: azul (0 usuários), verde (0 a 6), amarelo (7), vermelho (8).
-- **Feedback sonoro**: Buzzer emite beep curto (capacidade máxima) ou duplo (reset).
-- **Sincronização**: Mutex protege o acesso ao display; semáforos gerenciam entrada/saída e reset.
 
-## Requisitos
-- **Hardware**: Placa BitDogLab com RP2040.
-- **Software**:
-  - [Pico SDK](https://github.com/raspberrypi/pico-sdk) para compilação.
-  - Biblioteca `ssd1306.h` para o display OLED (incluída no diretório `lib/`).
-  - FreeRTOS configurado no projeto.
-- **Ferramentas**: CMake, GCC, e um ambiente para upload de firmware (ex.: Picotool).
+### Entrada de Usuário
+- **Botão A** (GP5):
+  - Incrementa a contagem de usuários na biblioteca (máximo 8).
+  - Exibe "Entrada!" no display OLED.
+  - Animação na matriz: Boneco verde caminha da esquerda para a direita (9 frames, 900ms).
+  - Se cheio, exibe "Capacidade Maxima!" e emite beep curto.
 
-## Instruções de Compilação
-1. Clone o repositório:
+### Saída de Usuário
+- **Botão B** (GP6):
+  - Decrementa a contagem de usuários (mínimo 0).
+  - Exibe "Saida!" no display OLED.
+  - Animação na matriz: Boneco vermelho caminha da direita para a esquerda (9 frames, 900ms).
+  - Se não houver usuários, exibe "Nenhum usuario!" e emite beep curto.
+
+### Reset do Sistema
+- **Joystick** (GP22):
+  - Zera a contagem de usuários e limpa a fila de eventos.
+  - Exibe "Sistema Reiniciado!" no display OLED.
+  - Animação na matriz: Piscar vermelho (intensidade 10).
+  - Feedback sonoro: Beep duplo (1000 Hz, 2x100 ms com pausa).
+
+### Exibição Visual
+- **Matriz de LEDs** (5x5, WS2812B, GP7):
+  - **Entrada**: Boneco verde (9 frames).
+  - **Saída**: Boneco vermelho (9 frames inversos).
+  - **Reset**: Piscar vermelho.
+  - **Contagem**: Grade 2x4 indicando usuários ativos (0–8).
+- **Display OLED** (SSD1306, 128x64, I2C em GP14-SDA, GP15-SCL):
+  - Mensagens: "Entrada!", "Saida!", "Capacidade Maxima!", "Nenhum usuario!", "Sistema Reiniciado!", "Controle de Acesso".
+  - Contagem: "Usuarios: <N>" (posição 5,50).
+- **LED RGB** (GP11-verde, GP12-azul, GP13-vermelho):
+  - Azul (0, 0, 255): Nenhum usuário.
+  - Verde (0, 255, 0): 1 a 6 usuários.
+  - Amarelo (255, 255, 0): 7 usuários.
+  - Vermelho (255, 0, 0): 8 usuários.
+
+### Feedback Sonoro
+- **Buzzer** (GP21, PWM):
+  - Beep curto (1000 Hz, 100 ms): Entrada cheia, saída sem usuários, entrada/saída.
+  - Beep duplo (1000 Hz, 2x100 ms com pausa): Reset.
+- Suporta acessibilidade para deficientes visuais.
+
+### Status Periódico
+- Atualização a cada 5 segundos:
+  - Exibe "Controle de Acesso" (posição 5,30) e contagem no display.
+  - Atualiza LED RGB e matriz (grade 2x4).
+
+## Tecnologias Utilizadas
+
+- **Placa**: BitDogLab (RP2040)
+- **Periféricos**:
+  - Matriz de LEDs WS2812B (5x5, GP7)
+  - Display OLED SSD1306 (I2C, GP14-SDA, GP15-SCL)
+  - Joystick (GP22, interrupção)
+  - LED RGB (GP11-verde, GP12-azul, GP13-vermelho)
+  - Buzzer (PWM, GP21)
+  - Botões (GP5-A, GP6-B)
+- **Software**: C, Pico SDK, FreeRTOS
+- **Bibliotecas**: `ssd1306.h`, `animacoes.h`, `matrizled.c`
+- **Sincronização**:
+  - `xSemaphoreCreateCounting`: Controle de usuários (`xContadorSem`, máximo 8).
+  - `xSemaphoreCreateBinary`: Reset via interrupção (`xResetSem`).
+  - `xSemaphoreCreateMutex`: Proteção de display (`xDisplayMutex`), matriz (`xMatrixMutex`), contagem (`xUsuariosMutex`).
+  - Fila de eventos (`xEventQueue`) para botões A/B.
+
+## Pré-requisitos
+
+- [Pico SDK](https://github.com/raspberrypi/pico-sdk)
+- Placa BitDogLab com RP2040
+- Componentes: Matriz WS2812B, display OLED, joystick, buzzer, LED RGB, botões
+- Ferramentas: Compilador C (ex.: GCC), CMake, terminal serial (ex.: minicom)
+
+## Como Rodar o Projeto
+
+1. **Clone o Repositório**:
    ```bash
    git clone https://github.com/Danngas/LibraryAccessControl.git
-   cd LibraryAccessControl
-   ```
-2. Configure o Pico SDK:
-   - Defina a variável de ambiente `PICO_SDK_PATH` apontando para o diretório do SDK.
-3. Compile o projeto:
-   ```bash
-   mkdir build
-   cd build
-   cmake ..
-   make
-   ```
-4. Carregue o firmware na placa BitDogLab (ex.: via USB com Picotool ou modo BOOTSEL).
+   cd Controle-de-Acesso-Biblioteca-BitDogLab
 
-## Estrutura do Repositório
-- `main.c`: Código-fonte principal com as tarefas FreeRTOS.
-- `lib/`: Bibliotecas externas (ex.: `ssd1306.h` para o display OLED).
-- `README.md`: Este arquivo com instruções e descrição do projeto.
-
-## Branches
-- `main`: Código consolidado e funcional.
-- `display-oled`: Implementação do display OLED com mutex.
-- `botao-a`: Tarefa de entrada (botão A, semáforo de contagem).
-- [Outras branches serão criadas para botão B, joystick, LED RGB, e buzzer.]
-
-## Status
-- [X] Display OLED com mutex implementado.
-- [X] Botão A (entrada) com semáforo de contagem.
-- [X] Botão B (saída).
-- [ ] Joystick (reset com semáforo binário).
-- [ ] LED RGB (feedback visual).
-- [ ] Buzzer (feedback sonoro).
-
-## Licença
-Este projeto é para fins acadêmicos e não possui licença pública.
